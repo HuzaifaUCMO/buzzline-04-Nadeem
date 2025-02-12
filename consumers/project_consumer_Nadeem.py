@@ -1,200 +1,95 @@
 """
-basic_json_consumer_case.py
+project_consumer_nadeem.py
+--------------------------
+A file-based consumer that reads JSON messages from a local file written
+by the unmodified producer `project_producer_case.py`. For each new message,
+we compute the average sentiment and update a real-time line chart.
 
-Read a JSON-formatted file as it is being written. 
-
-Example JSON message:
-{"message": "I just saw a movie! It was amazing.", "author": "Eve"}
+Author: Nadeem
 """
-
-#####################################
-# Import Modules
-#####################################
-
-# Import packages from Python Standard Library
 import json
-import os # for file operations
-import sys # to exit early
 import time
-import pathlib
-from collections import defaultdict  # data structure for counting author occurrences
-
-# IMPORTANT
-# Import Matplotlib.pyplot for live plotting
+import os
 import matplotlib.pyplot as plt
 
-# Import functions from local modules
-from utils.utils_logger import logger
+# Path to the file where the producer writes messages
+DATA_FILE = "data/project_producer_case.json"
 
+# Global variables to keep track of sentiment info
+message_count = 0
+total_sentiment = 0.0
+average_sentiment_values = []
 
-#####################################
-# Set up Paths - read from the file the producer writes
-#####################################
-
-PROJECT_ROOT = pathlib.Path(__file__).parent.parent
-DATA_FOLDER = PROJECT_ROOT.joinpath("data")
-DATA_FILE = DATA_FOLDER.joinpath("buzz_live.json")
-
-logger.info(f"Project root: {PROJECT_ROOT}")
-logger.info(f"Data folder: {DATA_FOLDER}")
-logger.info(f"Data file: {DATA_FILE}")
-
-#####################################
-# Set up data structures
-#####################################
-
-author_counts = defaultdict(int)
-
-#####################################
-# Set up live visuals
-#####################################
-
+# Set up Matplotlib in interactive mode
+plt.ion()
 fig, ax = plt.subplots()
-plt.ion()  # Turn on interactive mode for live updates
-
-#####################################
-# Define an update chart function for live plotting
-# This will get called every time a new message is processed
-#####################################
-
 
 def update_chart():
-    """Update the live chart with the latest author counts."""
-    # Clear the previous chart
+    """Updates the Matplotlib chart with the latest average sentiment."""
     ax.clear()
+    ax.set_title("Average Sentiment Over Time - Nadeem")
+    ax.set_xlabel("Number of Messages")
+    ax.set_ylabel("Average Sentiment (0.0 - 1.0)")
 
-    # Get the authors and counts from the dictionary
-    authors_list = list(author_counts.keys())
-    counts_list = list(author_counts.values())
+    ax.plot(average_sentiment_values, color='blue', marker='o')
+    plt.pause(0.001)
 
-    # Create a bar chart using the bar() method.
-    # Pass in the x list, the y list, and the color
-    ax.bar(authors_list, counts_list, color="green")
-
-    # Use the built-in axes methods to set the labels and title
-    ax.set_xlabel("Authors")
-    ax.set_ylabel("Message Counts")
-    ax.set_title("Basic Real-Time Author Message Counts")
-
-    # Use the set_xticklabels() method to rotate the x-axis labels
-    # Pass in the x list, specify the rotation angle is 45 degrees,
-    # and align them to the right
-    # ha stands for horizontal alignment
-    ax.set_xticklabels(authors_list, rotation=45, ha="right")
-
-    # Use the tight_layout() method to automatically adjust the padding
-    plt.tight_layout()
-
-    # Draw the chart
-    plt.draw()
-
-    # Pause briefly to allow some time for the chart to render
-    plt.pause(0.01)
-
-
-#####################################
-# Process Message Function
-#####################################
-
-
-def process_message(message: str) -> None:
+def process_message(record: dict):
     """
-    Process a single JSON message and update the chart.
-
-    Args:
-        message (str): The JSON message as a string.
+    Extracts the 'sentiment' field from the JSON record and updates
+    the running average.
     """
-    try:
-        # Log the raw message for debugging
-        logger.debug(f"Raw message: {message}")
+    global message_count, total_sentiment
 
-        # Parse the JSON string into a Python dictionary
-        message_dict: dict = json.loads(message)
-       
-        # Ensure the processed JSON is logged for debugging
-        logger.info(f"Processed JSON message: {message_dict}")
+    sentiment = record.get("sentiment", 0.0)
+    message_count += 1
+    total_sentiment += sentiment
 
-        # Ensure it's a dictionary before accessing fields
-        if isinstance(message_dict, dict):
-            # Extract the 'author' field from the Python dictionary
-            author = message_dict.get("author", "unknown")
-            logger.info(f"Message received from author: {author}")
+    average = total_sentiment / message_count
+    average_sentiment_values.append(average)
 
-            # Increment the count for the author
-            author_counts[author] += 1
+    # Update the chart to reflect the new average
+    update_chart()
 
-            # Log the updated counts
-            logger.info(f"Updated author counts: {dict(author_counts)}")
-
-            # Update the chart
-            update_chart()
-
-            # Log the updated chart
-            logger.info(f"Chart updated successfully for message: {message}")
-
-        else:
-            logger.error(f"Expected a dictionary but got: {type(message_dict)}")
-
-    except json.JSONDecodeError:
-        logger.error(f"Invalid JSON message: {message}")
-    except Exception as e:
-        logger.error(f"Error processing message: {e}")
-
-
-#####################################
-# Main Function
-#####################################
-
-
-def main() -> None:
+def main():
     """
-    Main entry point for the consumer.
-    - Monitors a file for new messages and updates a live chart.
+    Continuously reads new lines in DATA_FILE. Each line is expected to be valid JSON.
+    For each line, we process the message and update the chart in real time.
     """
+    print("Starting file-based consumer... Press Ctrl+C to exit at any time.")
 
-    logger.info("START consumer.")
-
-    # Verify the file we're monitoring exists if not, exit early
-    if not DATA_FILE.exists():
-        logger.error(f"Data file {DATA_FILE} does not exist. Exiting.")
-        sys.exit(1)
+    # Keep track of how many lines we've already processed
+    lines_processed = 0
 
     try:
-        # Try to open the file and read from it
-        with open(DATA_FILE, "r") as file:
+        while True:
+            if os.path.exists(DATA_FILE):
+                with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
 
-            # Move the cursor to the end of the file
-            file.seek(0, os.SEEK_END)
-            print("Consumer is ready and waiting for new JSON messages...")
+                # Process any new lines that haven't been processed yet
+                while lines_processed < len(lines):
+                    line = lines[lines_processed].strip()
+                    lines_processed += 1
 
-            while True:
-                # Read the next line from the file
-                line = file.readline()
+                    if not line:
+                        continue  # skip empty lines
 
-                # If we strip whitespace from the line and it's not empty
-                if line.strip():  
-                    # Process this new message
-                    process_message(line)
-                else:
-                    # otherwise, wait a half second before checking again
-                    logger.debug("No new messages. Waiting...")
-                    delay_secs = 0.5 
-                    time.sleep(delay_secs) 
-                    continue 
+                    try:
+                        record = json.loads(line)
+                        process_message(record)
+                    except json.JSONDecodeError:
+                        # If there's a parsing error, skip this line
+                        pass
 
+            # Sleep briefly before checking the file again
+            time.sleep(2)
     except KeyboardInterrupt:
-        logger.info("Consumer interrupted by user.")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        print("\nShutting down consumer.")
     finally:
+        # Turn off interactive mode and display final chart
         plt.ioff()
         plt.show()
-        logger.info("Consumer closed.")
-
-
-#####################################
-# Conditional Execution
-#####################################
 
 if __name__ == "__main__":
     main()
