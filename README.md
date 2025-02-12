@@ -210,3 +210,17 @@ Live Line Chart with Alert (Kafka CSV streaming)
 
 ![CSV (Kafka)](images/live_line_chart_example.jpg)
 
+## My Custom Consumer: Average Sentiment (File-Based)
+
+**What does it do?**
+- This consumer reads JSON messages from a local file (`data/project_producer.json`) written by the provided `project_producer_Nadeem.py`. 
+- For each message, it calculates the **average sentiment** so far and updates a line chart in real time.
+
+**Why it's interesting:**
+- We can see how sentiment evolves as new messages are appended to the file, offering insights into how users feel over time.
+
+**How to Run:**
+1. Open a terminal, activate your `.venv`, and start the **unmodified** producer:
+   ```bash
+   .venv\Scripts\activate
+   py -m producers.project_producer_Nadeem
